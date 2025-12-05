@@ -3,8 +3,8 @@
 #include <WebServer.h>
 
 // ===== Wi-Fi Credentials =====
-const char* ssid = "Babu";
-const char* password = "1234567890";
+const char* ssid = "JTL FAIBA";
+const char* password = "Langii7@7";
 
 // ===== SMTP (Gmail) Settings =====
 #define SMTP_HOST "smtp.gmail.com"
@@ -12,7 +12,7 @@ const char* password = "1234567890";
 
 const char* emailSenderAccount = "muthui@kabarak.ac.ke";  // Your Gmail
 const char* emailSenderPassword = "xawiaruupcsffutj";     // App Password
-const char* emailRecipient = "bkchepkwony@kabarak.ac.ke";   // Recipient
+const char* emailRecipient = "Danielmutua221@gmail.com";   // Recipient
 
 // ===== Noise Monitoring =====
 int noiseLevel = 0;
