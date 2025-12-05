@@ -11,7 +11,7 @@ const char* password = "Langii7@7";
 #define SMTP_PORT 465
 
 const char* emailSenderAccount = "muthui@kabarak.ac.ke";  // Your Gmail
-const char* emailSenderPassword = "xawiaruupcsffutj";     // App Password
+const char* emailSenderPassword = "****************";     // App Password
 const char* emailRecipient = "Danielmutua221@gmail.com";   // Recipient
 
 // ===== Noise Monitoring =====
