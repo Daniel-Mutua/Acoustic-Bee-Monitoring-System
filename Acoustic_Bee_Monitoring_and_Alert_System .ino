@@ -10,9 +10,9 @@ const char* password = "Langii7@7";
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
 
-const char* emailSenderAccount = "muthui@kabarak.ac.ke";  // Your Gmail
+const char* emailSenderAccount = "your gmail account";  // Your Gmail
 const char* emailSenderPassword = "****************";     // App Password
-const char* emailRecipient = "Danielmutua221@gmail.com";   // Recipient
+const char* emailRecipient = "recipient's email";   // Recipient
 
 // ===== Noise Monitoring =====
 int noiseLevel = 0;
