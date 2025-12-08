@@ -10,9 +10,9 @@ const char* password = "WI-FI password";
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
 
-const char* emailSenderAccount = "your gmail account";  
-const char* emailSenderPassword = "****************";     
-const char* emailRecipient = "recipient's email";   
+const char* emailSenderAccount = "your@gmail.com";  //Enter your email
+const char* emailSenderPassword = "****************";  //Enter application password, the 16 long characters   
+const char* emailRecipient = "recipient@gmail.com";   //Enter recepient's Email
 
 // ===== KY-037 Sound Sensor =====
 #define SOUND_SENSOR_PIN 34   // Analog pin for KY-037 AO
@@ -36,145 +36,238 @@ int alertIndex = 0;
 // ===== Webserver =====
 WebServer server(80);
 
-// ===== HTML PAGE =====
+// ===== Mail Client =====
+ESP_Mail_Client MailClient;
 
+// ===== HTML PAGE =====
+const char* webpage =
+"<!DOCTYPE html>\n"
+"<html>\n"
+"<head>\n"
+"<title>Acoustic Bee Monitoring and Alert System</title>\n"
+"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+"<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>\n"
+"<style>\n"
+"body { font-family: Arial, sans-serif; background: linear-gradient(to bottom right, #ffecd2, #fcb69f); display: flex; flex-direction: column; align-items: center; margin:0; padding:20px; }\n"
+".display { background: linear-gradient(to right, #ffe259, #ffa751); padding:25px; border-radius:20px; box-shadow:0 8px 20px rgba(0,0,0,0.3); text-align:center; color:#fff; width:300px; margin-bottom:30px; }\n"
+"h1 { margin-bottom:15px; text-shadow:2px 2px 5px rgba(0,0,0,0.3); }\n"
+".value { font-size:20px; margin:5px 0; font-weight:bold; }\n"
+"input { padding:8px; width:100px; margin-right:6px; border-radius:6px; border:none; outline:none; }\n"
+"button { padding:8px 12px; border:none; border-radius:6px; background:#ff6f61; color:white; cursor:pointer; font-weight:bold; margin: 5px; }\n"
+"button:hover { background:#ff3b2e; }\n"
+".alert { color:#ffd700; font-weight:bold; margin-top:10px; text-shadow:1px 1px 3px rgba(0,0,0,0.5); }\n"
+".chart-container { background: rgba(255,255,255,0.2); padding:20px; border-radius:15px; width:90%; max-width:500px; }\n"
+"#loggedAlertsDisplay { margin-top: 15px; background: rgba(255, 255, 255, 0.2); padding: 10px; border-radius: 10px; max-height: 150px; overflow-y: auto; text-align: left; }\n"
+"#alertList li { border-bottom: 1px solid rgba(255,255,255,0.3); padding: 5px 0; font-size: 14px; white-space: pre-wrap; }\n"
+"#alertList li:last-child { border-bottom: none; }\n"
+"</style>\n"
+"</head>\n"
+"<body>\n"
+"<div class=\"display\">\n"
+"<h1>Acoustic Bee Monitoring and Alert System</h1>\n"
+"<p class=\"value\">Noise Level: <span id=\"noiseValue\">--</span></p>\n"
+"<p class=\"value\">Threshold: <span id=\"thresholdValue\">--</span></p>\n"
+"<input id=\"thresholdInput\" type=\"number\" min=\"0\" max=\"1023\">\n"
+"<button onclick=\"updateThreshold()\">Set Threshold</button>\n"
+"<p id=\"alertMsg\" class=\"alert\"></p>\n"
+"<button onclick=\"toggleAlerts()\">Logged Alerts</button>\n"
+"<div id=\"loggedAlertsDisplay\" style=\"display: none;\">\n"
+"  <p style=\"margin: 0 0 5px 0; font-weight: bold; color: #fff;\">Logged Alerts (Newest First):</p>\n"
+"  <ul id=\"alertList\" style=\"list-style: none; padding: 0;\"></ul>\n"
+"</div>\n"
+"</div>\n"
+"<div class=\"chart-container\">\n"
+"<canvas id=\"noiseChart\"></canvas>\n"
+"</div>\n"
+"<script>\n"
+"const ctx = document.getElementById('noiseChart').getContext('2d');\n"
+"const dataPoints = [];\n"
+"const maxPoints = 20;\n"
+"const noiseChart = new Chart(ctx, { type:'line', data:{ labels:[], datasets:[{ label:'Noise Level', data:dataPoints, borderColor:'#ff3b2e', backgroundColor:'rgba(255,59,46,0.2)', tension:0.3 }]}, options:{ animation:false, scales:{ y:{ min:0, max:1023 }}}});\n"
+"async function refreshData() {\n"
+"  const res = await fetch('/data');\n"
+"  const data = await res.json();\n"
+"\n"
+"  document.getElementById('noiseValue').innerText = data.noise;\n"
+"  document.getElementById('thresholdValue').innerText = data.threshold;\n"
+"  document.getElementById('alertMsg').innerText = data.alert ? 'Noise exceeded!' : '';\n"
+"\n"
+"  const alertList = document.getElementById('alertList');\n"
+"  alertList.innerHTML = '';\n"
+"\n"
+"  const validAlerts = data.alertHistory.filter(entry => entry !== null);\n"
+"\n"
+"  if (validAlerts.length === 0) {\n"
+"    alertList.innerHTML = '<li>No alerts logged yet.</li>';\n"
+"  } else {\n"
+"    validAlerts.slice().reverse().forEach(alert => {\n"
+"      const listItem = document.createElement('li');\n"
+"      listItem.innerHTML = \n"
+"        `<strong>Time:</strong> ${alert.time}<br>` +\n"
+"        `<strong>To:</strong> ${alert.recipient}<br>` +\n"
+"        `<strong>Msg:</strong> ${alert.msg}`;\n"
+"      alertList.appendChild(listItem);\n"
+"    });\n"
+"  }\n"
+"\n"
+"  dataPoints.push(data.noise);\n"
+"  if (dataPoints.length > maxPoints) dataPoints.shift();\n"
+"  noiseChart.data.labels = dataPoints.map((_, i)=>i+1);\n"
+"  noiseChart.update();\n"
+"}\n"
+"async function updateThreshold() {\n"
+"  const value = document.getElementById('thresholdInput').value;\n"
+"  await fetch(`/data?threshold=${value}`);\n"
+"  refreshData();\n"
+"}\n"
+"function toggleAlerts() {\n"
+"  const display = document.getElementById('loggedAlertsDisplay');\n"
+"  display.style.display = display.style.display === 'none' || display.style.display === '' ? 'block' : 'none';\n"
+"}\n"
+"setInterval(refreshData, 1000);\n"
+"refreshData();\n"
+"</script>\n"
+"</body>\n"
+"</html>\n";
 
 // ===================================================
 // REAL NOISE READING FROM KY-037
 // ===================================================
 int readNoise() {
     int raw = analogRead(SOUND_SENSOR_PIN);
-
-    // Optionally convert raw 0–4095 to 0–1023 to match your UI scale
-    int scaled = map(raw, 0, 4095, 0, 1023);
-
-    return scaled;
+    return map(raw, 0, 4095, 0, 1023);
 }
 
 // ===================================================
 // TIMESTAMP
 // ===================================================
 String getTimestamp() {
-  unsigned long totalSeconds = millis() / 1000;
-  int h = (totalSeconds / 3600) % 24;
-  int m = (totalSeconds / 60) % 60;
-  int s = totalSeconds % 60;
-  char buf[9];
-  sprintf(buf, "%02d:%02d:%02d", h, m, s);
-  return String(buf);
+    unsigned long totalSeconds = millis() / 1000;
+    int h = (totalSeconds / 3600) % 24;
+    int m = (totalSeconds / 60) % 60;
+    int s = totalSeconds % 60;
+    char buf[9];
+    sprintf(buf, "%02d:%02d:%02d", h, m, s);
+    return String(buf);
 }
 
 // ===================================================
 // SEND EMAIL ALERT
 // ===================================================
 void sendEmailAlert(String msg) {
-  SMTPSession smtp;
-  SMTP_Message email;
+    SMTPSession smtp;
+    SMTP_Message email;
 
-  email.sender.name = "ESP32 Mailer";
-  email.sender.email = emailSenderAccount;
-  email.subject = "Noise Alert";
-  email.addRecipient("Recipient", emailRecipient);
-  email.text.content = msg.c_str();
+    email.sender.name = "ESP32 Mailer";
+    email.sender.email = emailSenderAccount;
+    email.subject = "Noise Alert";
+    email.addRecipient("Recipient", emailRecipient);
+    email.text.content = msg.c_str();
 
-  ESP_Mail_Session session;
-  session.server.host_name = SMTP_HOST;
-  session.server.port = SMTP_PORT;
-  session.login.email = emailSenderAccount;
-  session.login.password = emailSenderPassword;
-  session.login.user_domain = "";
+    ESP_Mail_Session session;
+    session.server.host_name = SMTP_HOST;
+    session.server.server_port = SMTP_PORT;
+    session.login.email = emailSenderAccount;
+    session.login.password = emailSenderPassword;
+    session.login.user_domain = "";
 
-  if (!smtp.connect(&session)) return;
+    if (!smtp.connect(&session)) return;
 
-  MailClient.sendMail(&smtp, &email);
-  smtp.closeSession();
+    MailClient.sendMail(&smtp, &email);
+    smtp.closeSession();
 }
 
 // ===================================================
 // SERVE HOME PAGE
 // ===================================================
 void handleRoot() {
-  server.send(200, "text/html", webpage);
+    server.send(200, "text/html", webpage);
 }
 
 // ===================================================
 // SEND SENSOR + ALERT JSON DATA
 // ===================================================
 void handleData() {
-  if (server.hasArg("threshold"))
-    threshold = server.arg("threshold").toInt();
+    if (server.hasArg("threshold"))
+        threshold = server.arg("threshold").toInt();
 
-  noiseLevel = readNoise();
-  bool alert = noiseLevel > threshold;
+    noiseLevel = readNoise();
+    bool alert = noiseLevel > threshold;
 
-  if (alert && !alertSent) {
-    alertSent = true;
-    String currentTimestamp = getTimestamp();
-    String alertMessage = "Bee Hive Alert! Noise level exceeded! Noise level: " 
-                          + String(noiseLevel) + " at " + currentTimestamp;
+    if (alert && !alertSent) {
+        alertSent = true;
+        String currentTimestamp = getTimestamp();
+        String alertMessage = "Bee Hive Alert! Noise level exceeded! Noise level: " 
+                              + String(noiseLevel) + " at " + currentTimestamp;
 
-    sendEmailAlert(alertMessage);
+        sendEmailAlert(alertMessage);
 
-    alertHistory[alertIndex].recipient = emailRecipient;
-    alertHistory[alertIndex].timestamp = currentTimestamp;
-    alertHistory[alertIndex].message = alertMessage;
+        alertHistory[alertIndex].recipient = emailRecipient;
+        alertHistory[alertIndex].timestamp = currentTimestamp;
+        alertHistory[alertIndex].message = alertMessage;
 
-    alertIndex = (alertIndex + 1) % MAX_ALERTS;
-  }
+        alertIndex = (alertIndex + 1) % MAX_ALERTS;
+    }
 
-  if (!alert) alertSent = false;
+    if (!alert) alertSent = false;
 
-  // Format alert history JSON
-  String historyJson = "[";
-  for (int i = 0; i < MAX_ALERTS; i++) {
-      if (i > 0) historyJson += ",";
+    // Format alert history JSON safely
+    String historyJson = "[";
+    for (int i = 0; i < MAX_ALERTS; i++) {
+        if (i > 0) historyJson += ",";
+        if (alertHistory[i].timestamp.length() > 0) {
+            String escapedMessage = alertHistory[i].message;
+            escapedMessage.replace("\\", "\\\\");
+            escapedMessage.replace("\"", "\\\"");
+            escapedMessage.replace("\n", "\\n");
 
-      if (alertHistory[i].timestamp.length() > 0) {
-          String escapedMessage = alertHistory[i].message;
-          escapedMessage.replace("\"", "\\\"");
+            historyJson += "{";
+            historyJson += "\"recipient\":\"" + alertHistory[i].recipient + "\",";
+            historyJson += "\"time\":\"" + alertHistory[i].timestamp + "\",";
+            historyJson += "\"msg\":\"" + escapedMessage + "\"";
+            historyJson += "}";
+        } else {
+            historyJson += "null";
+        }
+    }
+    historyJson += "]";
 
-          historyJson += "{";
-          historyJson += "\"recipient\":\"" + alertHistory[i].recipient + "\",";
-          historyJson += "\"time\":\"" + alertHistory[i].timestamp + "\",";
-          historyJson += "\"msg\":\"" + escapedMessage + "\"";
-          historyJson += "}";
-      } else {
-          historyJson += "null";
-      }
-  }
-  historyJson += "]";
+    String json = "{\"noise\":" + String(noiseLevel) +
+                  ",\"threshold\":" + String(threshold) +
+                  ",\"alert\":" + (alert ? "true" : "false") +
+                  ",\"alertHistory\":" + historyJson + "}";
 
-  String json = "{\"noise\":" + String(noiseLevel) +
-                ",\"threshold\":" + String(threshold) +
-                ",\"alert\":" + (alert ? "true" : "false") +
-                ",\"alertHistory\":" + historyJson + "}";
-
-  server.send(200, "application/json", json);
+    server.send(200, "application/json", json);
 }
 
 // ===================================================
 // SETUP
 // ===================================================
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  for (int i = 0; i < MAX_ALERTS; i++) {
-    alertHistory[i].recipient = "";
-    alertHistory[i].timestamp = "";
-    alertHistory[i].message = "";
-  }
+    for (int i = 0; i < MAX_ALERTS; i++) {
+        alertHistory[i].recipient = "";
+        alertHistory[i].timestamp = "";
+        alertHistory[i].message = "";
+    }
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print(".");
+        delay(500);
+    }
+    Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
 
-  server.on("/", handleRoot);
-  server.on("/data", handleData);
-  server.begin();
+    server.on("/", handleRoot);
+    server.on("/data", handleData);
+    server.begin();
 }
 
 // ===================================================
 // LOOP
 // ===================================================
 void loop() {
-  server.handleClient();
+    server.handleClient();
 }
